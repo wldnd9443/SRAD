@@ -1,5 +1,4 @@
 # SRAD - Super Resolution Anomlay Detection
-Super-Resolution Anomaly Detection
 
 baseline code RIAD: https://github.com/plutoyuxie/Reconstruction-by-inpainting-for-visual-anomaly-detection
 
