@@ -5,6 +5,10 @@ baseline code RIAD: https://github.com/plutoyuxie/Reconstruction-by-inpainting-f
 Ongoing research, wish me good luck!
 
 ## ToDo
+- [x] Overall architecture
+- [ ] Adapting super-resolution models
+- [ ] Generate synthetic anomaly
+
 
 
 
