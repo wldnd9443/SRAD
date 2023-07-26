@@ -7,6 +7,11 @@ import torch
 from torch.utils.data import Dataset
 from torchvision import transforms
 
+from albumentations.augmentations.geometric.transforms import ShiftScaleRotate
+from albumentations.core.composition import SomeOf
+import albumentations
+import albumentations.pytorch
+
 
 
 #URL = 'ftp://guest:GU.205dldo@ftp.softronics.ch/mvtec_anomaly_detection/mvtec_anomaly_detection.tar.xz'
@@ -22,6 +27,8 @@ class MVTecDataset(Dataset):
                  class_name='bottle',
                  is_train=True,
                  resize=256,
+                 patch_size=128,
+                 scale_factor=2,
                  aug_mode=False
                  ):
         assert class_name in CLASS_NAMES, 'class_name: {}, should be in {}'.format(class_name, CLASS_NAMES)
@@ -29,38 +36,51 @@ class MVTecDataset(Dataset):
         self.class_name = class_name
         self.is_train = is_train
         self.resize = resize
+        self.patch_size = patch_size
+        self.scale_factor = scale_factor
         self.aug_mode = aug_mode
-        # self.mvtec_folder_path = os.path.join(root_path, 'mvtec_anomaly_detection')
 
-        # download dataset if not exist
-        # self.download()
-
-        # load dataset
         self.x, self.y, self.mask = self.load_dataset_folder()
 
         # set transforms
         self.transform_x = transforms.Compose([
-            transforms.Resize(resize, Image.LANCZOS),
+            transforms.Resize(self.resize, Image.BICUBIC),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
         ])
         self.transform_aug = transforms.Compose([
             transforms.RandomVerticalFlip(),
             transforms.RandomHorizontalFlip(),
-            transforms.RandomRotation((-90,90))
+            transforms.RandomRotation((90,90)),
+            transforms.RandomRotation((-90,-90))
         ])
 
         self.transform_mask = transforms.Compose(
             [transforms.Resize(resize, Image.NEAREST),
              transforms.ToTensor()])
+        self.transform_randomcrop = transforms.Compose([
+            #transforms.ToPILImage(),
+            transforms.RandomCrop(self.patch_size),
+            #transforms.ToTensor()
+        ])
+
+        self.transform_bicubic = transforms.Compose([
+            transforms.Resize(int(self.patch_size/self.scale_factor), Image.BICUBIC)
+
+        ])
+
 
     def __getitem__(self, idx):
         x, y, mask = self.x[idx], self.y[idx], self.mask[idx]
-
         x = Image.open(x).convert('RGB')
+
         if self.aug_mode:
             x = self.transform_aug(x)
         x = self.transform_x(x)
+
+        hr_patch = self.transform_randomcrop(x)
+        lr_patch = self.transform_bicubic(hr_patch)
+        #lr_patch = lr_patch.clamp(-1,1)
 
         if y == 0:
             mask = torch.zeros([1, self.resize, self.resize])
@@ -68,7 +88,7 @@ class MVTecDataset(Dataset):
             mask = Image.open(mask)
             mask = self.transform_mask(mask)
 
-        return x, y, mask
+        return x, y, mask, hr_patch, lr_patch
 
     def __len__(self):
         return len(self.x)
