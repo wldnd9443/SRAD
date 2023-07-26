@@ -6,8 +6,9 @@ Ongoing research, wish me good luck!
 
 ## ToDo
 - [x] Overall architecture
-- [ ] Adapting super-resolution models
-- [ ] Generate synthetic anomaly
+- [x] Generation Network (Adapting super-resolution models)
+- [x] Generate synthetic anomaly
+- [ ] Segmentation Network
 
 
 
