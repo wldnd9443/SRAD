@@ -1,11 +1,23 @@
 import os
-#import tarfile
 from PIL import Image
-#import urllib.request
-import random
 import torch
 from torch.utils.data import Dataset
 from torchvision import transforms
+from torch.nn import functional as F
+# from utils import bicubic_sampling
+
+
+# class AddGaussianNoise(object):
+#     def __init__(self, mean=0., std=1.):
+#         self.std = std
+#         self.mean = mean
+         
+#     def __call__(self, tensor):
+#         return tensor + torch.randn(tensor.size()) * self.std + self.mean
+     
+#     def __repr__(self):
+#         return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
+
 
 CLASS_NAMES = [
     'candle', 
@@ -28,6 +40,8 @@ class VisaDataset(Dataset):
                  class_name='candle',
                  is_train=True,
                  resize=256,
+                 patch_size=128,
+                 scale_factor=2,
                  aug_mode=False
                  ):
         assert class_name in CLASS_NAMES, 'class_name: {}, should be in {}'.format(class_name, CLASS_NAMES)
@@ -35,45 +49,79 @@ class VisaDataset(Dataset):
         self.class_name = class_name
         self.is_train = is_train
         self.resize = resize
+        self.patch_size = patch_size
+        self.scale_factor = scale_factor
         self.aug_mode = aug_mode
         self.x, self.y, self.mask = self.load_dataset_folder()
 
         # set transforms
         self.transform_x = transforms.Compose([
-            transforms.Resize(resize, Image.LANCZOS),
-            transforms.CenterCrop(resize),
+            transforms.Resize(self.resize, Image.BICUBIC),
+            transforms.CenterCrop(self.resize),
+            #transforms.RandomCrop((patch_size, patch_size)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
         ])
+
         self.transform_aug = transforms.Compose([
-            transforms.RandomVerticalFlip(),
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomRotation((-90,90))
+            #transforms.ToTensor(),
+            transforms.RandomApply([
+                #AddGaussianNoise(0.1,0.08),
+                transforms.RandomVerticalFlip(),
+                transforms.RandomHorizontalFlip(),
+                transforms.RandomRotation((90, 90)),
+                transforms.RandomRotation((-90, -90))
+                ], p=0.5)
         ])
 
+        self.transform_randomcrop = transforms.Compose([
+            #transforms.ToPILImage(),
+            transforms.RandomCrop(self.patch_size),
+            #transforms.ToTensor()
+        ])
+
+        self.transform_bicubic = transforms.Compose([
+            transforms.Resize(int(self.patch_size/self.scale_factor), Image.BICUBIC)
+
+        ])
+        
         self.transform_mask = transforms.Compose(
-            [transforms.Resize(resize, Image.NEAREST),
-             transforms.CenterCrop(resize),
+            [transforms.Resize(self.resize, Image.NEAREST),
+             transforms.CenterCrop(self.resize),
              transforms.ToTensor()])
+        
     def __getitem__(self, idx):
         x, y, mask = self.x[idx], self.y[idx], self.mask[idx]
-
         x = Image.open(x).convert('RGB')
+        
         if self.aug_mode:
             x = self.transform_aug(x)
         x = self.transform_x(x)
 
+        hr_patch = self.transform_randomcrop(x)
+        lr_patch = self.transform_bicubic(hr_patch)
+        # lr_patch = lr_patch.clamp(-1,1)
         if y == 0:
             mask = torch.zeros([1, self.resize,self.resize])
         else: 
             mask = Image.open(mask)
             mask = self.transform_mask(mask)
-
-        return x, y, mask
+        return x, y, mask, hr_patch, lr_patch 
     
     def __len__(self):
         return len(self.x)
     
+
+    # def bicubic_sampling(self, tensor, scale_factor):
+    #     """
+    #         input: 4D tensor(including batch)
+    #         output: tensor 
+    #     """
+    #     tensor = tensor.to(torch.float32)
+    #     result = F.interpolate(tensor, scale_factor=scale_factor,mode="bicubic")
+    #     result = result.to(torch.uint8)
+    #     return result
+
     def load_dataset_folder(self):
         phase = 'train' if self.is_train else 'test'
         x, y, mask = [],[],[]
@@ -108,3 +156,6 @@ class VisaDataset(Dataset):
 
         return list(x), list(y), list(mask)
 
+# if __name__ == "__main__":
+#     dataset = VisaDataset()
+#     print(dataset[0][3].shape)
